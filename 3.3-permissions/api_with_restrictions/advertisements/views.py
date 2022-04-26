@@ -1,13 +1,14 @@
 from rest_framework import status
-from rest_framework.permissions import IsAuthenticated, IsAdminUser
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 from rest_framework.decorators import action
+from django.db.models import Q
 
 from .models import Advertisement
 from .serializers import AdvertisementSerializer
 from .filters import AdvertisementFilter
-from .permissions import IsOwnerOrReadOnly
+from .permissions import IsOwnerOrReadOnlyOrAdmin
 
 
 class AdvertisementViewSet(ModelViewSet):
@@ -15,30 +16,26 @@ class AdvertisementViewSet(ModelViewSet):
     queryset = Advertisement.objects.all()
     serializer_class = AdvertisementSerializer
     filterset_class = AdvertisementFilter
-    permission_classes = [IsAuthenticated, IsOwnerOrReadOnly, IsAdminUser, ]
+    permission_classes = [IsAuthenticated, IsOwnerOrReadOnlyOrAdmin]
 
     def get_permissions(self):
         """Получение прав для действий."""
         if self.action in ["create", "update", "partial_update", "destroy"]:
-            return [IsAuthenticated(), IsOwnerOrReadOnly(), IsAdminUser()]
+            return [IsAuthenticated(), IsOwnerOrReadOnlyOrAdmin()]
         return []
 
     def get_queryset(self):
         """ Переопределяем queryset, чтобы показывать черновики только создателям"""
-        not_draft_ads = []
-        user = self.request.user
-        advertisements = self.queryset
-        for ads in advertisements:
-            if ads.status in ('OPEN', 'CLOSED') or (ads.status == 'DRAFT' and ads.creator == user):
-                not_draft_ads.append(ads.pk)
-        return Advertisement.objects.filter(id__in=not_draft_ads)
+        user = self.request.user.id
+        return Advertisement.objects.filter(Q(status__in=('OPEN', 'CLOSED')) | Q(status='DRAFT', creator=user))
 
-    @action(detail=False, methods=['PATCH'], name='add_bookmark', url_path='add-bookmark',
+    @action(detail=True, methods=['PATCH'], name='add_bookmark', url_path='add-bookmark',
             url_name='add-bookmark')
-    def add_bookmark(self, request):
+    def add_bookmark(self, request, pk=None):
+        """ Добавляем объявление в закладки"""
         user = request.user
-        if user != Advertisement.objects.get(id=request.data['id']).creator:
-            user.favourites.add(Advertisement.objects.get(id=request.data['id']))
+        if user != Advertisement.objects.get(id=pk).creator:
+            user.favourites.add(Advertisement.objects.get(id=pk))
             return Response("OK", status=status.HTTP_200_OK)
         else:
             raise ValueError('Вы не можете добавить своё объявление в избранное')
@@ -46,7 +43,8 @@ class AdvertisementViewSet(ModelViewSet):
     @action(detail=False, methods=['GET'], name='bookmarks_list', url_path='bookmarks-list',
             url_name='bookmarks-list')
     def bookmarks_list(self, request):
-        if request.user is int:
+        """ Смотрим список объявлений, добавленных в закладки"""
+        if request.user.is_authenticated:
             queryset = Advertisement.objects.filter(favourites=request.user)
         else:
             raise ValueError('Вам нужно авторизоваться, чтобы посмотреть список избранных объявлений')
