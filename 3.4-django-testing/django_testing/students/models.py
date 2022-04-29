@@ -1,8 +1,8 @@
 from django.db import models
+from django.core.validators import MaxValueValidator
 
 
 class Student(models.Model):
-
     name = models.TextField()
 
     birth_date = models.DateField(
@@ -11,10 +11,12 @@ class Student(models.Model):
 
 
 class Course(models.Model):
-
     name = models.TextField()
 
     students = models.ManyToManyField(
         Student,
         blank=True,
+        # validators=[
+        #     MaxValueValidator(20),
+        # ]
     )
