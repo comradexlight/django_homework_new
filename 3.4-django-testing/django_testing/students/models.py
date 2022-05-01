@@ -1,5 +1,8 @@
+from django.core.exceptions import ValidationError
 from django.db import models
-from django.core.validators import MaxValueValidator
+from django.db.models.signals import m2m_changed
+
+from django_testing import settings
 
 
 class Student(models.Model):
@@ -16,7 +19,10 @@ class Course(models.Model):
     students = models.ManyToManyField(
         Student,
         blank=True,
-        # validators=[
-        #     MaxValueValidator(20),
-        # ]
     )
+
+def students_changed(sender, **kwargs):
+    if kwargs['instance'].students.count() > settings.MAX_STUDENTS_PER_COURSE:
+        raise ValidationError('На одном курсе не может быть больше 20 студентов')
+
+m2m_changed.connect(students_changed, sender=Course.students.through)

@@ -1,8 +1,10 @@
 import pytest
+from django.core.exceptions import ValidationError
 from rest_framework.test import APIClient
 from model_bakery import baker
 
 from students.models import Course, Student
+from django_testing import settings
 
 
 @pytest.fixture
@@ -85,13 +87,20 @@ def test_delete_courses(client, course_factory):
 
 
 @pytest.mark.django_db
-def test_max_students_per_course(client, student_factory, settings):
-    students = student_factory(_quantity=22)
+def test_max_students_per_course_positive(client, student_factory):
+    students = student_factory(_quantity=20)
     students_ids = [student.id for student in students]
-    print(students_ids)
-    # print(settings.MAX_STUDENTS_PER_COURSE)
     response = client.post('/api/v1/courses/',
                            data={'name': 'Test Course', 'students': students_ids})
-    print(response.status_code)
-    print(response.data)
-    assert response.status_code == 200
+    assert response.status_code == 201
+
+
+@pytest.mark.django_db
+def test_max_students_per_course_negative(client, student_factory):
+    students = student_factory(_quantity=21)
+    students_ids = [student.id for student in students]
+
+    with pytest.raises(ValidationError):
+        response = client.post('/api/v1/courses/',
+                               data={'name': 'Test Course', 'students': students_ids})
+
